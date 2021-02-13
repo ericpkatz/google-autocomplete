@@ -1,0 +1,131 @@
+<html>
+  <head>
+<style>
+body {
+  font-family: verdana;
+}
+.container {
+  display: flex;
+}
+.container > * {
+  flex: 1;
+}
+
+.container > * {
+  margin: 1rem;
+}
+.map {
+  height: 300;
+}
+li {
+  cursor: pointer;
+}
+.favorite {
+  background-color: dodgerBlue;
+  color: cornSilk;
+}
+</style>
+    <script src="https://maps.googleapis.com/maps/api/js?key=<%= PLACES_API_KEY %>&libraries=places"></script>
+
+    <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  </head>
+  <body>
+    <div id='root'></div>
+
+    <script type='text/babel'>
+
+      class Autocomplete extends React.Component{
+        componentDidMount(){
+          const autocomplete = new google.maps.places.Autocomplete(this.el);
+          autocomplete.addListener('place_changed', async()=> {
+            const place = autocomplete.getPlace();
+            const name = place.formatted_address;
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+            await this.props.placeChanged({name, lat, lng });
+            this.el.value = '';
+          });
+        }
+        render(){
+          return(
+            <input ref={ el => this.el = el} />
+          );
+        }
+      }
+
+
+
+      class App extends React.Component{
+        constructor(){
+          super();
+          this.state = {
+            places: []
+          };
+          this.toggle = this.toggle.bind(this);
+          this.createPlace = this.createPlace.bind(this);
+        }
+        async toggle(place){
+          const response = await fetch(`/api/places/${place.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isFavorite: !place.isFavorite }),
+            headers: {
+              'content-type': 'application/json'
+            }
+          })
+          const data = await response.json();
+          const places = this.state.places.map( _place => _place.id === data.id ? data : _place);
+          this.setState({ places });
+        }
+        async createPlace(place){
+          const response = await fetch('/api/places', {
+            method: 'POST',
+            body: JSON.stringify(place),
+            headers: {
+              'content-type': 'application/json'
+            }
+          })
+          const data = await response.json();
+          this.setState({ places: [...this.state.places, data] });
+        }
+        async componentDidMount(){
+          const response = await fetch('/api/places');
+          const places = await response.json();
+          this.setState({
+            places
+          });
+        }
+        render(){
+          const { places } = this.state;
+          const { toggle, createPlace } = this;
+          return (
+            <div className='container'>
+              <div>
+                <Autocomplete placeChanged={ createPlace }/>
+              </div>
+              <ul>
+                {
+                  places.map( place => {
+                    return (
+                      <li key={place.id} className={ place.isFavorite ? 'favorite': ''} onClick={ ()=> toggle(place)}>
+                        { place.name }
+                      </li>
+                      
+                    );
+                  })
+                }
+              </ul>
+              <div>
+                <Autocomplete placeChanged={ createPlace }/>
+              </div>
+            </div>
+          );
+        }
+
+
+      }
+      ReactDOM.render(<App />, document.querySelector('#root'));
+    </script>
+  </body>
+</html>

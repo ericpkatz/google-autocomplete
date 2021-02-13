@@ -1,0 +1,173 @@
+<html>
+  <head>
+<style>
+body {
+  font-family: verdana;
+}
+.container {
+  display: flex;
+}
+.container > * {
+  flex: 1;
+}
+
+.container > * {
+  margin: 1rem;
+}
+.map {
+  height: 300;
+}
+li {
+  cursor: pointer;
+}
+.favorite {
+  background-color: dodgerBlue;
+  color: cornSilk;
+}
+</style>
+    <script>
+      function generateMap(el, center){
+        return new mapboxgl.Map({
+          container: el, // container ID
+          style: 'mapbox://styles/mapbox/streets-v11', 
+          center: [center.lng*1, center.lat*1], 
+          zoom: 9 
+        });
+      }
+      function addMarkers(map, places){
+        map.markers = [];
+        places.forEach( place => {
+          addMarker(map, place);
+        });
+      }
+
+      function addMarker(map, place){
+        const marker = new mapboxgl.Marker({
+          properties: { title: 'foo' }
+}).setLngLat([place.lng*1, place.lat*1]);
+        marker.id = place.id;
+        marker.addTo(map);
+        map.markers.push(marker);
+      }
+
+      function setBounds(map, places){
+        const bounds = new mapboxgl.LngLatBounds();
+        places.forEach( place => {
+          const { lat, lng } = place;
+          bounds.extend([lng* 1, lat * 1]);
+        });
+        if(places.length){
+          map.fitBounds(bounds);
+        }
+      }
+
+      function removeMarker(map, place){
+        const marker = map.markers.find( marker => marker.id === place.id);
+        marker.remove();
+        map.markers = map.markers.filter(m => m !== marker);
+      }
+
+    </script>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.1.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.1.0/mapbox-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  </head>
+  <body>
+    <div id='root'></div>
+
+    <script type='text/babel'>
+      const MAP_API_KEY = '<%= MAP_API_KEY %>';
+      mapboxgl.accessToken = MAP_API_KEY;
+
+
+      class MyMap extends React.Component{
+        componentDidMount(){
+        }
+        componentDidUpdate(prevProps){
+          if(!prevProps.center && this.props.center){
+            this.map = generateMap(this.el, this.props.center);
+            setBounds(this.map, this.props.places);
+            addMarkers(this.map, this.props.places);
+          }
+          if(prevProps.center && prevProps.places.length !== this.props.places.length){
+
+            const added = this.props.places.find(place => !prevProps.places.find(p => p.id === place.id));
+            if(added){
+              addMarker(this.map, added);
+              setBounds(this.map, this.props.places);
+            }
+            const removed = prevProps.places.find(place => !this.props.places.find(p => p.id === place.id));
+            if(removed){
+              removeMarker(this.map, removed);
+              setBounds(this.map, this.props.places);
+            }
+          }
+        }
+        render(){
+          return <div className='map' ref={el => this.el = el}></div>
+        }
+      }
+
+
+      class App extends React.Component{
+        constructor(){
+          super();
+          this.state = {
+            places: []
+          };
+          this.toggle = this.toggle.bind(this);
+        }
+        async toggle(place){
+          const response = await fetch(`/api/places/${place.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isFavorite: !place.isFavorite }),
+            headers: {
+              'content-type': 'application/json'
+            }
+          })
+          const data = await response.json();
+          const places = this.state.places.map( _place => _place.id === data.id ? data : _place);
+          this.setState({ places });
+        }
+        async componentDidMount(){
+          const response = await fetch('/api/places');
+          const places = await response.json();
+          this.setState({
+            places
+          });
+        }
+        render(){
+          const { places } = this.state;
+          const { toggle } = this;
+          const favorites = places.filter( place => place.isFavorite);
+          const notFavorites = places.filter( place => !place.isFavorite);
+          const center = favorites.length ? favorites[0] : places[0]
+          const notFavoriteCenter = notFavorites.length ? notFavorites[0] : places[0];
+          return (
+            <div className='container'>
+              <ul>
+                {
+                  places.map( place => {
+                    return (
+                      <li key={place.id} className={ place.isFavorite ? 'favorite': ''} onClick={ ()=> toggle(place)}>
+                        { place.name }
+                      </li>
+                      
+                    );
+                  })
+                }
+              </ul>
+              <MyMap places={ favorites } center={ center }/>
+              <MyMap places={ notFavorites } center={ notFavoriteCenter }/>
+            </div>
+          );
+        }
+
+
+      }
+      ReactDOM.render(<App />, document.querySelector('#root'));
+    </script>
+  </body>
+</html>
